@@ -282,6 +282,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
          CHAR16* TempLine = AllocatePool((LineLength + 1) * sizeof(CHAR16));
          if (TempLine == NULL) {
              Print(L"Error: Unable to allocate memory for temporary line\n");
+             FreePool(BsaConfig);
              return NULL;
          }
          StrnCpyS(TempLine, (LineLength + 1), Line, LineLength);
@@ -465,6 +466,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
      CHAR8 *Content = NULL;
      UINTN ContentSize = 0;
      CHAR16* ConfigFileContent = NULL;
+     CHAR16* SetShellVariable = NULL;
  
      // Locate all the handles that support the Simple File System Protocol
     // Locate and open the config file
@@ -481,6 +483,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
          File->Close(File);
          Root->Close(Root);
          FreePool(Handles);
+         FreePool(Content);
          return Status;
      }
  
@@ -530,19 +533,36 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
      // Set BsaEnableDisable environment variable
      if (BsaConfig->BsaEnabled)
      {
-         ShellSetEnvironmentVariable(L"automation_bsa_run", L"true", TRUE);
+        SetShellVariable = L"true";
      }
      else
      {
-         ShellSetEnvironmentVariable(L"automation_bsa_run", L"false", TRUE);
+        SetShellVariable = L"false";
      }
- 
+     Status = ShellSetEnvironmentVariable(L"automation_bsa_run", SetShellVariable, TRUE);
+     if (EFI_ERROR(Status))
+     {
+         Print(L"Failed to set environment variable: %r\n", Status);
+         FreePool(BsaConfig);
+         FreePool(ConfigFileContent);
+         FreePool(Content);
+         File->Close(File);
+         Root->Close(Root);
+         FreePool(Handles);
+         return (INTN)Status;
+     }
      // Set the command string as an environment variable
      Status = ShellSetEnvironmentVariable(L"BsaCommand", BsaCommandString, TRUE);
      if (EFI_ERROR(Status))
      {
-         Print(L"Failed to set environment variable: %r\n", Status);
-         return (INTN)Status;
+        Print(L"Failed to set environment variable: %r\n", Status);
+        FreePool(BsaConfig);
+        FreePool(ConfigFileContent);
+        FreePool(Content);
+        File->Close(File);
+        Root->Close(Root);
+        FreePool(Handles);
+        return (INTN)Status;
      }
      // Clean up
      //FreePool(BsaCommandString);
@@ -576,6 +596,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
      CHAR8 *Content = NULL;
      UINTN ContentSize = 0;
      CHAR16 *ConfigFileContent = NULL;
+     CHAR16 *SetShellVariable = NULL;
  
     // Locate and open the config file
     Status = LocateConfigFile(&Root, &File);
@@ -593,6 +614,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
          File->Close(File);
          Root->Close(Root);
          FreePool(Handles);
+         FreePool(Content);
          return Status;
      }
  
@@ -610,6 +632,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
          File->Close(File);
          Root->Close(Root);
          FreePool(Handles);
+         FreePool(Content);
          return EFI_OUT_OF_RESOURCES;
      }
  
@@ -648,18 +671,35 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
      // Set SbsaEnableDisable environment variable
      if (SbsaConfig->SbsaEnabled)
      {
-         ShellSetEnvironmentVariable(L"automation_sbsa_run", L"true", TRUE);
+        SetShellVariable = L"true";
      }
      else
      {
-         ShellSetEnvironmentVariable(L"automation_sbsa_run", L"false", TRUE);
+        SetShellVariable = L"false";
      }
- 
+     Status = ShellSetEnvironmentVariable(L"automation_sbsa_run",SetShellVariable, TRUE);
+     if (EFI_ERROR(Status))
+     {
+         Print(L"Failed to set environment variable: %r\n", Status);
+         FreePool(SbsaConfig);
+         FreePool(ConfigFileContent);
+         FreePool(Content);
+         File->Close(File);
+         Root->Close(Root);
+         FreePool(Handles);
+         return (INTN)Status;
+     }
      // Set the command string as an environment variable
      Status = ShellSetEnvironmentVariable(L"SbsaCommand", SbsaCommandString, TRUE);
      if (EFI_ERROR(Status))
      {
          Print(L"Failed to set environment variable: %r\n", Status);
+         FreePool(SbsaConfig);
+         FreePool(ConfigFileContent);
+         FreePool(Content);
+         File->Close(File);
+         Root->Close(Root);
+         FreePool(Handles);
          return (INTN)Status;
      }
  
@@ -728,6 +768,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
          if (TempLine == NULL)
          {
              Print(L"Error: Unable to allocate memory for temporary line\n");
+             FreePool(SbsaConfig);
              return NULL;
          }
          StrnCpyS(TempLine, (LineLength + 1), Line, LineLength);
@@ -984,6 +1025,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
          if (TempLine == NULL)
          {
              Print(L"Error: Unable to allocate memory for temporary line\n");
+             FreePool(SctConfig);
              return NULL;
          }
          StrnCpyS(TempLine, (LineLength + 1), Line, LineLength);
@@ -1168,7 +1210,8 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
      CHAR8 *Content = NULL;
      UINTN ContentSize = 0;
      CHAR16 *ConfigFileContent = NULL;
- 
+     CHAR16 *SetShellVariable = NULL;
+
     // Locate and open the config file
     Status = LocateConfigFile(&Root, &File);
     if (EFI_ERROR(Status))
@@ -1185,6 +1228,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
          File->Close(File);
          Root->Close(Root);
          FreePool(Handles);
+         FreePool(Content);
          return Status;
      }
  
@@ -1226,17 +1270,37 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
      // Set SctEnableDisable environment variable
      if (SctConfig->Enabled)
      {
-         ShellSetEnvironmentVariable(L"automation_sct_run", L"true", TRUE);
+         SetShellVariable = L"true";
      }
      else
      {
-         ShellSetEnvironmentVariable(L"automation_sct_run", L"false", TRUE);
+        SetShellVariable = L"false";
+     }
+     Status = ShellSetEnvironmentVariable(L"automation_sct_run", SetShellVariable, TRUE);
+     if (EFI_ERROR(Status))
+     {
+         Print(L"Failed to set environment variable: %r\n", Status);
+         FreePool(SctConfig->SequenceFile);
+         FreePool(SctConfig);
+         FreePool(ConfigFileContent);
+         FreePool(Content);
+         File->Close(File);
+         Root->Close(Root);
+         FreePool(Handles);
+         return (INTN)Status;
      }
     // Set the command string as an environment variable
      Status = ShellSetEnvironmentVariable(L"SctCommand", SctCommandString, TRUE);
      if (EFI_ERROR(Status))
      {
          Print(L"Failed to set environment variable: %r\n", Status);
+         FreePool(SctConfig->SequenceFile);
+         FreePool(SctConfig);
+         FreePool(ConfigFileContent);
+         FreePool(Content);
+         File->Close(File);
+         Root->Close(Root);
+         FreePool(Handles);
          return (INTN)Status;
      }
      // Clean up
@@ -1284,6 +1348,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
          if (TempLine == NULL)
          {
              Print(L"Error: Unable to allocate memory for temporary line\n");
+             FreePool(GenericConfig);
              return NULL;
          }
          StrnCpyS(TempLine, (LineLength + 1), Line, LineLength);
@@ -1420,6 +1485,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
      CHAR8 *Content = NULL;
      UINTN ContentSize = 0;
      CHAR16 *ConfigFileContent = NULL;
+     CHAR16 *SetShellVariable = NULL;
  
     // Locate and open the config file
     Status = LocateConfigFile(&Root, &File);
@@ -1436,6 +1502,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
          File->Close(File);
          Root->Close(Root);
          FreePool(Handles);
+         FreePool(Content);
          return Status;
      }
  
@@ -1459,13 +1526,24 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
      // Set SctEnableDisable environment variable
      if (GenericConfig->Enabled)
      {
-         ShellSetEnvironmentVariable(L"config_enabled_for_automation_run", L"true", TRUE);
+        SetShellVariable =  L"true";
      }
      else
      {
-         ShellSetEnvironmentVariable(L"config_enabled_for_automation_run", L"false", TRUE);
-     } return (INTN)Status;
-     
+        SetShellVariable =  L"false";      
+     }
+     Status = ShellSetEnvironmentVariable(L"config_enabled_for_automation_run", SetShellVariable, TRUE);
+     if (EFI_ERROR(Status))
+     {
+         Print(L"Failed to set environment variable: %r\n", Status);
+         FreePool(GenericConfig);
+         FreePool(ConfigFileContent);
+         FreePool(Content);
+         File->Close(File);
+         Root->Close(Root);
+         FreePool(Handles);
+         return (INTN)Status;
+     }
      FreePool(GenericConfig);
      FreePool(ConfigFileContent);
      FreePool(Content);
@@ -1508,6 +1586,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
          if (TempLine == NULL)
          {
              Print(L"Error: Unable to allocate memory for temporary line\n");
+             FreePool(ScrtConfig);
              return NULL;
          }
          StrnCpyS(TempLine, (LineLength + 1), Line, LineLength);
@@ -1644,6 +1723,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
      CHAR8 *Content = NULL;
      UINTN ContentSize = 0;
      CHAR16 *ConfigFileContent = NULL;
+     CHAR16 *SetShellVariable = NULL;
  
     // Locate and open the config file
     Status = LocateConfigFile(&Root, &File);
@@ -1661,6 +1741,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
          File->Close(File);
          Root->Close(Root);
          FreePool(Handles);
+         FreePool(Content);
          return Status;
      }
  
@@ -1684,13 +1765,24 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
      // Set SctEnableDisable environment variable
      if (ScrtConfig->Enabled)
      {
-         ShellSetEnvironmentVariable(L"automation_scrt_run", L"true", TRUE);
+        SetShellVariable = L"true";
      }
      else
      {
-         ShellSetEnvironmentVariable(L"automation_scrt_run", L"false", TRUE);
-     } return (INTN)Status;
-     
+        SetShellVariable = L"false";
+     }
+     Status = ShellSetEnvironmentVariable(L"automation_scrt_run",SetShellVariable, TRUE);
+     if (EFI_ERROR(Status))
+     {
+         Print(L"Failed to set environment variable: %r\n", Status);
+         FreePool(ScrtConfig);
+         FreePool(ConfigFileContent);
+         FreePool(Content);
+         File->Close(File);
+         Root->Close(Root);
+         FreePool(Handles);
+         return (INTN)Status;
+     }
      FreePool(ScrtConfig);
      FreePool(ConfigFileContent);
      FreePool(Content);
@@ -1735,6 +1827,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv);
         if (TempLine == NULL)
         {
             Print(L"Error: Unable to allocate memory for temporary line\n");
+            FreePool(BbsrSctConfig);
             return NULL;
         }
         StrnCpyS(TempLine, (LineLength + 1), Line, LineLength);
@@ -1897,6 +1990,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv){
     CHAR8 *Content = NULL;
     UINTN ContentSize = 0;
     CHAR16 *ConfigFileContent = NULL;
+    CHAR16* SetShellVariable = NULL ;
 
    // Locate and open the config file
    Status = LocateConfigFile(&Root, &File);
@@ -1914,6 +2008,7 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv){
         File->Close(File);
         Root->Close(Root);
         FreePool(Handles);
+        FreePool(Content);
         return Status;
     }
 
@@ -1955,17 +2050,37 @@ INTN EFIAPI run_bbsr_sct_logic(UINTN Argc, IN CHAR16 **Argv){
     // Set BbsrSctEnableDisable environment variable
     if (BbsrSctConfig->BbsrSctEnabled)
     {
-        ShellSetEnvironmentVariable(L"automation_bbsr_sct_run", L"true", TRUE);
+        SetShellVariable = L"true";
     }
     else
     {
-        ShellSetEnvironmentVariable(L"automation_bbsr_sct_run", L"false", TRUE);
+        SetShellVariable = L"false";
+    }
+    Status = ShellSetEnvironmentVariable(L"automation_bbsr_sct_run",SetShellVariable, TRUE);
+    if (EFI_ERROR(Status))
+    {
+        Print(L"Failed to set environment variable: %r\n", Status);
+        FreePool(BbsrSctConfig->SequenceFile);
+        FreePool(BbsrSctConfig);
+        FreePool(ConfigFileContent);
+        FreePool(Content);
+        File->Close(File);
+        Root->Close(Root);
+        FreePool(Handles);
+        return (INTN)Status;
     }
    // Set the command string as an environment variable
     Status = ShellSetEnvironmentVariable(L"BbsrSctCommand", BbsrSctCommandString, TRUE);
     if (EFI_ERROR(Status))
     {
         Print(L"Failed to set environment variable: %r\n", Status);
+        FreePool(BbsrSctConfig->SequenceFile);
+        FreePool(BbsrSctConfig);
+        FreePool(ConfigFileContent);
+        FreePool(Content);
+        File->Close(File);
+        Root->Close(Root);
+        FreePool(Handles);
         return (INTN)Status;
     }
     // Clean up
