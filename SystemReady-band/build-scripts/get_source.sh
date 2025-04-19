@@ -193,6 +193,16 @@ get_buildroot_src()
         # patch buildroot config
         git apply $TOP_DIR/../common/patches/build_fwts_version_25.01.00.patch
     popd
+    pushd $TOP_DIR/buildroot/package
+        echo "Applying KVMTOOL patch"
+        git apply $TOP_DIR/../common/patches/0001-update-kvmtool-hash.patch
+    popd
+    mkdir -p $TOP_DIR/buildroot/dl
+    pushd $TOP_DIR/buildroot/dl
+        wget https://github.com/libexpat/libexpat/releases/download/R_2_4_8/expat-2.4.8.tar.xz
+        wget https://toolchains.bootlin.com/downloads/releases/sources/libzlib-1.2.12/zlib-1.2.12.tar.xz
+        wget https://ftp.gnu.org/gnu/gnuboot/mirrors/acpica.org/acpica-unix2-20200717.tar.gz
+    popd
 }
 
 get_efitools_src()
