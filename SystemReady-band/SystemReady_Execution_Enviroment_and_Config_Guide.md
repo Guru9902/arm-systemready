@@ -1,8 +1,11 @@
-# SystemReady Automation Configuration User Guide
+# SystemReady Band Execution Enviroment and Configuration User Guide
 
 ## Overview
 
-This guide provides details on the new configuration-based automation feature integrated into the SystemReady-band image. The image supports running various test suites in both UEFI and Linux environments. A configuration file is used to selectively enable/disable individual test suites. This allows for flexible and targeted testing.
+This guide provides details on the SR band Execution Enviroment and configuration-based feature integrated into the SystemReady-band image.
+
+Execution Enviroment is used to run manually only a desired selected test suites, and with a configuration file the test suite run can be customized with required parameter.
+The configuration file can also be used to selectively enable/disable individual test suites in automation run. This allows for flexible and targeted testing.
 
 ---
 
@@ -59,13 +62,13 @@ automation_bbsr_tpm_run = true
 
 ### Behavior Details for Config-Based Automation
 
-This section explains how the automation flow behaves based on the `config_enabled_for_automation_run` flag in the configuration file.
+This section explains how the automation run behaves based on the `config_enabled_for_automation_run` flag in the configuration file.
 
 ---
 
 ### Configuration variable: `config_enabled_for_automation_run`
 
-This flag controls whether the automation system should follow the instructions in the configuration file or use the default legacy behavior.
+This flag controls whether the automation run should follow the instructions in the configuration file or use the default behavior.
 
 ```ini
 [AUTOMATION]
@@ -116,18 +119,27 @@ config_enabled_for_automation_run = false
 
 ---
 
-## GRUB Menu Options
+## SR Execution Enviroment
 
+The grub menu is updated to provide two more options for execution enviroment.
 On boot, users are presented with the following GRUB menu:
 
-1. **Linux Boot** - Boots into the default Linux environment.
-2. **SystemReady band ACS (Automation)** - Initiates the automation flow.
-3. **BBSR Compliance (Automation)** -  - Launches the BBSR-specific testing environment.
-4. **UEFI Execution Enviroment** - Allows manual execution of UEFI-based test suites using the config file.
-5. **Linux Execution Enviroment** - Allows manual execution of Linux-based test suites using the config file. 
-6. **Set Virtual Address Map** - Technical option for configuring memory map behavior in UEFI.
-
+```
+Linux Boot
+SystemReady band ACS (Automation)
+BBSR Compliance (Automation)
+UEFI Execution Enviroment
+Linux Execution Enviroment
+Set Virtual Address Map
+```
 ---
+
+- Linux Boot - Boots into the default Linux environment.
+- SystemReady band ACS (Automation) - Initiates the automation flow.
+- BBSR Compliance (Automation) -  - Launches the BBSR-specific testing environment.
+- UEFI Execution Enviroment - Allows manual execution of UEFI-based test suites using the config file.
+- Linux Execution Enviroment - Allows manual execution of Linux-based test suites using the config file. 
+- Set Virtual Address Map - Technical option for configuring memory map behavior in UEFI.
 
 ## SystemReady band ACS (Automation) Flow
 
