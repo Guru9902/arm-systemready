@@ -26,7 +26,7 @@ def parse_fwts_log(log_path):
     main_tests = []
     current_test = None
     current_subtest = None
-    Test_suite_Description = None
+    Test_suite_description = None
 
     # Summary variables
     suite_summary = {
@@ -64,10 +64,10 @@ def parse_fwts_log(log_path):
                     results.append(current_test)
 
                 # Start a new main test
-                Test_suite_Description = line.split(':', 1)[1].strip() if ':' in line else "No description"
+                Test_suite_description = line.split(':', 1)[1].strip() if ':' in line else "No description"
                 current_test = {
                     "Test_suite": main_test,
-                    "Test_suite_Description": Test_suite_Description,
+                    "Test_suite_description": Test_suite_description,
                     "subtests": [],
                     "test_suite_summary": {
                         "total_passed": 0,
@@ -107,16 +107,16 @@ def parse_fwts_log(log_path):
             }
             continue
 
-        # Check for test abortion and properly append the whole reason
-        if "Aborted" in line or "ABORTED" in line:
+        # Treat esrt abort test as failure
+        if "Aborted" in line and "Cannot find ESRT table" in line:
             if not current_subtest:
                 current_subtest = {
                     "sub_Test_Number": "Test 1 of 1",
-                    "sub_Test_Description": "Aborted test",
+                    "sub_Test_Description": " ",
                     "sub_test_result": {
                         "PASSED": 0,
-                        "FAILED": 0,
-                        "ABORTED": 1,
+                        "FAILED": 1,
+                        "ABORTED": 0,
                         "SKIPPED": 0,
                         "WARNINGS": 0,
                         "pass_reasons": [],
@@ -198,7 +198,7 @@ def parse_fwts_log(log_path):
             skip_acpi_match = re.search(r"ACPI\s+(\S+)\s+table does not exist, skipping test", line)
             if skip_acpi_match and current_test:
                 # Create a new subtest to record the skip
-                sub_desc = current_test.get("Test_suite_Description")
+                sub_desc = current_test.get("Test_suite_description")
 
                 skip_subtest = {
                     "sub_Test_Number": "Test 1 of 1",

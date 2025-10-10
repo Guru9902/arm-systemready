@@ -22,32 +22,32 @@ import os
 # Test Suite Mapping
 test_suite_mapping = {
     "dt_kselftest": {
-        "Test_suite_name": "DTValidation",
+        "Test_suite": "Peripherals",
         "Test_suite_description": "Validation for device tree",
         "Test_case_description": "Device Tree kselftests"
     },
     "dt_validate": {
-        "Test_suite_name": "DTValidation",
+        "Test_suite": "DTValidation",
         "Test_suite_description": "Validation for device tree",
         "Test_case_description": "Device Tree Validation"
     },
     "ethtool_test": {
-        "Test_suite_name": "Network",
+        "Test_suite": "Network",
         "Test_suite_description": "Network validation",
         "Test_case_description": "Ethernet Tool Tests"
     },
     "read_write_check_blk_devices": {
-        "Test_suite_name": "Boot sources",
+        "Test_suite": "Boot sources",
         "Test_suite_description": "Checks for boot sources",
         "Test_case_description": "Read/Write Check on Block Devices"
     },
     "capsule_update": {
-        "Test_suite_name": "Capsule Update",
+        "Test_suite": "Capsule Update",
         "Test_suite_description": "Testing firmware capsule update mechanism",
         "Test_case_description": "Capsule Update Tests"
     },
     "psci_check": {
-        "Test_suite_name": "PSCI",
+        "Test_suite": "PSCI",
         "Test_suite_description": "PSCI version check",
         "Test_case_description": "PSCI compliance"
     },
@@ -75,6 +75,8 @@ def create_subtest(subtest_number, description, status, reason=""):
     }
     return result
 
+ansi_escape = re.compile(r'\x1B\[[0-9;]*[A-Za-z]')
+
 def update_suite_summary(suite_summary, status):
     if status in ["PASSED", "FAILED", "SKIPPED", "ABORTED", "WARNINGS"]:
         key = f"total_{status.lower()}"
@@ -94,7 +96,7 @@ def parse_dt_kselftest_log(log_data):
     }
 
     current_test = {
-        "Test_suite_name": mapping["Test_suite_name"],
+        "Test_suite": mapping["Test_suite"],
         "Test_suite_description": mapping["Test_suite_description"],
         "Test_case": test_suite_key,
         "Test_case_description": mapping["Test_case_description"],
@@ -157,7 +159,7 @@ def parse_dt_validate_log(log_data):
     }
 
     current_test = {
-        "Test_suite_name": mapping["Test_suite_name"],
+        "Test_suite": mapping["Test_suite"],
         "Test_suite_description": mapping["Test_suite_description"],
         "Test_case": test_suite_key,
         "Test_case_description": mapping["Test_case_description"],
@@ -166,17 +168,43 @@ def parse_dt_validate_log(log_data):
     }
 
     subtest_number = 1
+    start_processing = False
     for line in log_data:
         line = line.strip()
-        # Often dt-validate will show lines like /path: error blah
-        if re.match(r'^/.*: ', line):
-            description = line
-            status = 'FAILED'
-            sub = create_subtest(subtest_number, description, status, reason=line)
-            current_test["subtests"].append(sub)
-            current_test["test_suite_summary"]["total_failed"] += 1
-            suite_summary["total_failed"] += 1
-            subtest_number += 1
+        # enable parsing only after marker
+        if not start_processing:
+            if line.lower().startswith("non-ignored entries"):
+                start_processing = True
+            continue
+        # skip underline dashes after marker
+        if line.startswith("---"):
+            continue
+
+        # --- normalize new table rows to legacy format & skip noise ---
+        m_tab = re.match(
+            r'^\s*(\S.*?)\s+.*?\b(error|warning)\b\s*(.*)\s*$' , line, flags=re.IGNORECASE
+        )
+        if m_tab:
+            node = m_tab.group(1).strip()
+            status = m_tab.group(2).lower()
+            msg = m_tab.group(3).strip()
+            if node and status in ['error', 'warning']:
+                if status == 'error':
+                    status = 'FAILED'
+                    sub = create_subtest(subtest_number, node, status, reason=msg)
+                    current_test["subtests"].append(sub)
+                    current_test["test_suite_summary"]["total_failed"] += 1
+                    suite_summary["total_failed"] += 1
+                else:
+                    status = 'WARNINGS'
+                    sub = create_subtest(subtest_number, node, status, reason=msg)
+                    sub["sub_test_result"]["WARNINGS"] = 1
+                    sub["sub_test_result"]["warning_reasons"] = [msg]
+                    current_test["subtests"].append(sub)
+                    current_test["test_suite_summary"]["total_warnings"] += 1
+                    suite_summary["total_warnings"] += 1
+
+                subtest_number += 1
 
     # >>> REMOVE EMPTY REASON ARRAYS <<<
     for subtest in current_test["subtests"]:
@@ -211,7 +239,7 @@ def parse_ethtool_test_log(log_data):
     }
 
     current_test = {
-        "Test_suite_name": mapping["Test_suite_name"],
+        "Test_suite": mapping["Test_suite"],
         "Test_suite_description": mapping["Test_suite_description"],
         "Test_case": test_suite_key,
         "Test_case_description": mapping["Test_case_description"],
@@ -223,8 +251,22 @@ def parse_ethtool_test_log(log_data):
     interface = None
     detected_interfaces = []
     i = 0
+    # strip ANSI codes from the entire log once
+    log_data = [re.sub(ansi_escape, '', s) for s in log_data]
     while i < len(log_data):
-        line = log_data[i].strip()
+        line = re.sub(ansi_escape, '', log_data[i]).strip()
+        # Detecting interfaces
+        if line.startswith("INFO: No ethernet interfaces detected via ip linux command"):
+            status = "FAILED"
+            desc = "No Ethernet Interfaces Detected"
+            sub = create_subtest(subtest_number, desc, status)
+            current_test["subtests"].append(sub)
+            update_suite_summary(current_test["test_suite_summary"], status)
+            suite_summary[f"total_{status.lower()}"] += 1
+            subtest_number += 1
+            i += 1
+            continue
+
         # Detecting interfaces
         if line.startswith("INFO: Detected following ethernet interfaces via ip command :"):
             interfaces = []
@@ -281,7 +323,7 @@ def parse_ethtool_test_log(log_data):
             subtest_number += 1
 
         # Running ethtool command
-        if f"INFO: Running \"ethtool {interface}\" :" in line:
+        if f'INFO: Running "ethtool {interface}' in line:
             status = "PASSED"
             desc = f"Running ethtool on {interface}"
             sub = create_subtest(subtest_number, desc, status)
@@ -477,7 +519,7 @@ def parse_read_write_check_blk_devices_log(log_data):
     }
 
     current_test = {
-        "Test_suite_name": mapping["Test_suite_name"],
+        "Test_suite": mapping["Test_suite"],
         "Test_suite_description": mapping["Test_suite_description"],
         "Test_case": test_suite_key,
         "Test_case_description": mapping["Test_case_description"],
@@ -773,10 +815,10 @@ def parse_read_write_check_blk_devices_log(log_data):
     }
 
 # PARSER FOR CAPSULE UPDATE 
-def parse_capsule_update_logs(capsule_update_log_path, capsule_test_results_log_path):
+def parse_capsule_update_logs(capsule_update_log_path, capsule_on_disk_log_path, capsule_test_results_log_path):
     test_suite_key = "capsule_update"
     mapping = {
-        "Test_suite_name": "Capsule Update",
+        "Test_suite": "Capsule Update",
         "Test_suite_description": "Tests for automatic capsule update",
         "Test_case_description": "Capsule Update"
     }
@@ -791,7 +833,7 @@ def parse_capsule_update_logs(capsule_update_log_path, capsule_test_results_log_
     }
 
     current_test = {
-        "Test_suite_name": mapping["Test_suite_name"],
+        "Test_suite": mapping["Test_suite"],
         "Test_suite_description": mapping["Test_suite_description"],
         "Test_case": test_suite_key,
         "Test_case_description": mapping["Test_case_description"],
@@ -807,6 +849,7 @@ def parse_capsule_update_logs(capsule_update_log_path, capsule_test_results_log_
             return []
 
     update_lines = read_file_lines(capsule_update_log_path, encoding='utf-16')
+    on_disk_lines = read_file_lines(capsule_on_disk_log_path, encoding='utf-16')
     results_lines = read_file_lines(capsule_test_results_log_path, encoding='utf-8')
 
     subtest_number = 1
@@ -850,6 +893,46 @@ def parse_capsule_update_logs(capsule_update_log_path, capsule_test_results_log_
                     elif "not present" in test_info.lower():
                         result = "FAILED"
                     elif "succeed to write" in test_info.lower():
+                        result = "PASSED"
+                    else:
+                        result = "FAILED"
+                    break
+                else:
+                    i += 1
+            add_subtest(test_desc, result, reason=test_info.splitlines())
+        i += 1
+
+    # PARSE capsule-on-disk.log
+    i = 0
+    while i < len(on_disk_lines):
+        line = on_disk_lines[i].strip()
+        match = re.match(r"Testing\s+signed_capsule\.bin\s+OD\s+update", line, re.IGNORECASE)
+        if match:
+            test_desc = line
+            test_info = ""
+            result = "FAILED"
+            i += 1
+            while i < len(on_disk_lines):
+                cur = on_disk_lines[i].strip()
+                if re.match(r"Testing\s+", cur, re.IGNORECASE):
+                    i -= 1
+                    break
+                elif re.match(r"Test[_\s]Info", cur, re.IGNORECASE):
+                    i += 1
+                    info_lines = []
+                    while i < len(on_disk_lines):
+                        info_line = on_disk_lines[i].strip()
+                        if re.match(r"Testing\s+", info_line, re.IGNORECASE):
+                            i -= 1
+                            break
+                        info_lines.append(info_line)
+                        i += 1
+                    test_info = "\n".join(info_lines)
+                    if "signed_capsule.bin not present" in test_info.lower():
+                        result = "FAILED"
+                    elif "uefi capsule update has failed" in test_info.lower():
+                        result = "FAILED"
+                    elif "succeed to write signed_capsule.bin" in test_info.lower():
                         result = "PASSED"
                     else:
                         result = "FAILED"
@@ -925,7 +1008,7 @@ def parse_capsule_update_logs(capsule_update_log_path, capsule_test_results_log_
             else:
                 result = "FAILED" if any_failed else "PASSED"
             add_subtest(test_desc, result, reason=test_info_lines)
-
+        i += 1
 
     # >>> REMOVE EMPTY REASON ARRAYS <<<
     for subtest in current_test["subtests"]:
@@ -959,11 +1042,12 @@ def parse_psci_logs(psci_log_path):
         "total_skipped": 0,
         "total_aborted": 0,
         "total_warnings": 0,
-        "total_failed_with_waivers": 0
+        "total_failed_with_waiver": 0,
+        "total_ignored": 0
     }
 
     current_test = {
-        "Test_suite_name": mapping["Test_suite_name"],       # "PSCI"
+        "Test_suite": mapping["Test_suite"],       # "PSCI"
         "Test_suite_description": mapping["Test_suite_description"],  # "PSCI version check"
         "Test_case": test_suite_key,                         # "psci_check"
         "Test_case_description": mapping["Test_case_description"],  # "PSCI compliance"
@@ -971,18 +1055,9 @@ def parse_psci_logs(psci_log_path):
         "test_suite_summary": suite_summary.copy()
     }
 
-    # If file not found => Instead of failing, let's mark this as a WARNING
+    # If file not found, return so that it is treated as failure
     if not os.path.isfile(psci_log_path):
-        sub = create_subtest(
-            subtest_number=1,
-            description="PSCI version checker(1.0 or above)",
-            status="WARNINGS",
-            reason=f"PSCI log file not found at {psci_log_path}"
-        )
-        current_test["subtests"].append(sub)
-        current_test["test_suite_summary"]["total_warnings"] += 1
-        suite_summary["total_warnings"] += 1
-        return {"test_results": [current_test], "suite_summary": suite_summary}
+        sys.exit(1)
 
     # Read lines
     with open(psci_log_path, 'r') as f:
@@ -1006,17 +1081,17 @@ def parse_psci_logs(psci_log_path):
                 status = "PASSED"
                 reason = f"PSCI version {version_found} >= 1.0"
             else:
-                # Below 1.0 => WARNING, not fail
-                status = "WARNINGS"
-                reason = f"PSCI version {version_found} < 1.0 => WARN"
+                # Below 1.0 => FAIL
+                status = "FAILED"
+                reason = f"PSCI version {version_found} < 1.0"
         except ValueError:
-            # Invalid format => WARNING, not fail
-            status = "WARNINGS"
+            # Invalid format => FAILED
+            status = "FAILED"
             reason = f"Invalid PSCI version format: {version_found}"
     else:
-        # No PSCI line found => WARNING, not fail
-        status = "WARNINGS"
-        reason = "No 'PSCIvX.Y detected in firmware' line found"
+        # PSCI is recommened, as for cases where psci is not supported no psci version will come
+        # treat that case as not run and failure
+        sys.exit(1)
 
     sub = create_subtest(1, subtest_desc, status, reason)
     current_test["subtests"].append(sub)
@@ -1065,10 +1140,10 @@ if __name__ == "__main__":
             json.dump(result, out, indent=4)
         sys.exit(0)
 
-    elif len(args) == 4 and args[0].lower() == "capsule_update":
+    elif len(args) == 5 and args[0].lower() == "capsule_update":
         # Capsule update usage
-        _, update_log, test_results_log, output_json = args
-        result = parse_capsule_update_logs(update_log, test_results_log)
+        _, update_log, on_disk_log, test_results_log, output_json = args
+        result = parse_capsule_update_logs(update_log, on_disk_log, test_results_log)
         with open(output_json, 'w') as out:
             json.dump(result, out, indent=4)
         sys.exit(0)
@@ -1078,12 +1153,15 @@ if __name__ == "__main__":
         # logs_to_json.py psci_check <psci_log> <output_json>
         _, psci_log, output_json = args
         result = parse_psci_logs(psci_log)
-        with open(output_json, 'w') as out:
-            json.dump(result, out, indent=4)
+        if result is None or result == {}:
+            print("Invalid PSCI log, skipping JSON dump.")
+        else:
+            with open(output_json, 'w') as out:
+                json.dump(result, out, indent=4)
         sys.exit(0)
     else:
         print("Usage:")
         print("  1) Single log:      python3 logs_to_json.py <path_to_log> <output_JSON>")
-        print("  2) Capsule update:  python3 logs_to_json.py capsule_update <update_log> <test_results_log> <output_JSON>")
+        print("  2) Capsule update:  python3 logs_to_json.py capsule_update <update_log> <on_disk_log> <test_results_log> <output_JSON>")
         print("  3) PSCI check:      python3 logs_to_json.py psci_check <psci_kernel.log> <output_JSON>")
         sys.exit(1)

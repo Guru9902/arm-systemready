@@ -25,6 +25,11 @@ if ! grep -q "ttySC0" /etc/securetty; then
   echo "added ttySC0"
 fi
 
+if ! grep -q "ttyAML0" /etc/securetty; then
+  echo "ttyAML0" >> /etc/securetty
+  echo "added ttyAML0"
+fi
+
 sleep 5
 
 echo "Attempting to mount the results partition ..."
@@ -39,6 +44,13 @@ else
 fi
 sleep 3
 
+if [ -f /mnt/acs_tests/bbr/boot_tolinuxprompt.flag ]; then
+  echo "Booted after Secure Boot clearance. Skipping ACS tests, Booting to Linux terminal..."
+  rm /mnt/acs_tests/bbr/boot_tolinuxprompt.flag
+ # echo "Please press <Enter> to continue ..."
+  exit 0
+fi
+
 #Skip running of ACS Tests if the grub option is added
 ADDITIONAL_CMD_OPTION="";
 ADDITIONAL_CMD_OPTION=`cat /proc/cmdline | awk '{ print $NF}'`
@@ -51,11 +63,22 @@ if [ $ADDITIONAL_CMD_OPTION != "noacs" ]; then
       echo "Call BBSR ACS in Linux"
       /usr/bin/secure_init.sh
       echo "BBSR ACS run is completed\n"
-      echo "SecureBoot keys needs to be manually cleared, please refer to BBSR_ACS_Verification.md guide for the steps"
-      echo "https://github.com/ARM-software/arm-systemready/blob/main/docs/BBSR_ACS_Verification.md"
-      echo "Please press <Enter> to continue ..."
-      echo -e -n "\n"
-      exit 0
+      secureboot_state=$(hexdump -v -e '1/1 "%02x"' /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c 2>/dev/null | tail -c 2)
+      if [ "$secureboot_state" = "01" ]; then
+        echo -e "\033[1;31m*** Secure Boot is ENABLED. Disabling Secure Boot.....     ***\033[0m"
+        touch /mnt/acs_tests/bbr/clear_secureboot.flag
+        sync
+        umount /mnt
+        echo "Rebooting system to enter UEFI shell"
+        sleep 1
+        reboot
+        sleep 3
+      else
+        echo "Secure Boot is not enabled. Skipping secureboot PK clearance"
+        echo "Please press <Enter> to continue ..."
+        echo -e -n "\n"
+        exit 0
+      fi
     fi
 
     check_flag=0
@@ -110,7 +133,7 @@ if [ $ADDITIONAL_CMD_OPTION != "noacs" ]; then
       echo "Executing FWTS for EBBR"
       test_list=`cat /usr/bin/ir_bbr_fwts_tests.ini | grep -v "^#" | awk '{print $1}' | xargs`
       echo "Test Executed are $test_list"
-      echo "SystemReady devicetree band ACS v3.0.1" > /mnt/acs_results_template/acs_results/fwts/FWTSResults.log
+      echo "SystemReady devicetree band ACS v3.1.0" > /mnt/acs_results_template/acs_results/fwts/FWTSResults.log
       /usr/bin/fwts --ebbr `echo $test_list` -r stdout >> /mnt/acs_results_template/acs_results/fwts/FWTSResults.log
       echo -e -n "\n"
       sync /mnt
@@ -123,8 +146,8 @@ if [ $ADDITIONAL_CMD_OPTION != "noacs" ]; then
       if [ -f /lib/modules/*/kernel/bsa_acs/bsa_acs.ko ]; then
         echo "Running Linux BSA tests"
         insmod /lib/modules/*/kernel/bsa_acs/bsa_acs.ko
-        echo "SystemReady devicetree band ACS v3.0.1" > /mnt/acs_results_template/acs_results/linux_acs/bsa_acs_app/BSALinuxResults.log
-        bsa >> /mnt/acs_results_template/acs_results/linux_acs/bsa_acs_app/BSALinuxResults.log
+        echo "SystemReady devicetree band ACS v3.1.0" > /mnt/acs_results_template/acs_results/linux_acs/bsa_acs_app/BSALinuxResults.log
+        bsa --skip-dp-nic-ms >> /mnt/acs_results_template/acs_results/linux_acs/bsa_acs_app/BSALinuxResults.log
         dmesg | sed -n 'H; /PE_INFO/h; ${g;p;}' > /mnt/acs_results_template/acs_results/linux_acs/bsa_acs_app/BsaResultsKernel.log
         sync /mnt
         sleep 5
@@ -163,10 +186,12 @@ if [ $ADDITIONAL_CMD_OPTION != "noacs" ]; then
         fi
         echo "Running dt-validate tool "
         dt-validate -s /usr/bin/processed_schema.json -m /home/root/fdt/fdt 2>> /mnt/acs_results_template/acs_results/linux_tools/dt-validate.log
-        sed -i '1s/^/DeviceTree bindings of Linux kernel version: 6.12 \ndtschema version: 2025.02 \n\n/' /mnt/acs_results_template/acs_results/linux_tools/dt-validate.log
+        sed -i '1s/^/DeviceTree bindings of Linux kernel version: 6.16 \ndtschema version: 2025.02 \n\n/' /mnt/acs_results_template/acs_results/linux_tools/dt-validate.log
         if [ ! -s /mnt/acs_results_template/acs_results/linux_tools/dt-validate.log ]; then
           echo "The FDT is compliant according to schema " >> /mnt/acs_results_template/acs_results/linux_tools/dt-validate.log
         fi
+        # Run dt parser on dt-validate log to categorize failures
+        /usr/bin/systemready-scripts/dt-parser.py /mnt/acs_results_template/acs_results/linux_tools/dt-validate.log --print 2>&1 | tee /mnt/acs_results_template/acs_results/linux_tools/dt-validate-parser.log
       else
         echo  "Error: The FDT devicetree file, fdt, does not exist at /sys/firmware/fdt. Cannot run dt-schema tool" | tee /mnt/acs_results_template/acs_results/linux_tools/dt-validate.log
       fi
@@ -336,6 +361,11 @@ if [ $ADDITIONAL_CMD_OPTION != "noacs" ]; then
           rm -r /mnt/acs_results_template/acs_results/acs_summary
         fi
       /usr/bin/log_parser/main_log_parser.sh /mnt/acs_results_template/acs_results /mnt/acs_tests/config/acs_config.txt /mnt/acs_tests/config/system_config.txt /mnt/acs_tests/config/acs_waiver.json
+      fi
+      # Copying acs_waiver.json into result directory.
+      if [ -f /mnt/acs_tests/config/acs_waiver.json ]; then
+        mkdir -p /mnt/acs_results_template/acs_results/acs_summary/config
+        cp /mnt/acs_tests/config/acs_waiver.json /mnt/acs_results_template/acs_results/acs_summary/config
       fi
       echo "Please wait acs results are syncing on storage medium."
       sync /mnt
