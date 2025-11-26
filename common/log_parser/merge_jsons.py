@@ -58,6 +58,7 @@ DT_SRS_SCOPE_TABLE = [
     ("BBSR-TPM", "EM"),
     ("BBSR-FWTS", "EM"),
     ("DT_KSELFTEST", "R"),
+    ("SMBIOS", "R"),
     ("PSCI", "R"),
     ("POST_SCRIPT", "R"),
     ("OS_TEST", "M"),
@@ -92,7 +93,7 @@ def compliance_label(suite_name: str) -> str:
     else:
         tag = "Recommended"
     # Match the console ordering: “Suite: <tag>  : <suite> …”
-    return f"Suite_Name: {suite_name}  : {tag}_compliance"
+    return f"Suite_Name: {tag}  : {suite_name}_compliance"
 
 
 def reformat_json(json_file_path):
@@ -367,6 +368,9 @@ def merge_json_files(json_files, output_file):
         elif "READ_WRITE_CHECK_BLK_DEVICES" in fn:
             section_name = "Suite_Name: Read Write Check Block Devices"
             suite_key    = "READ_WRITE_CHECK_BLK_DEVICES"
+        elif "SMBIOS" in fn:
+            section_name = "Suite_Name: SMBIOS"
+            suite_key    = "SMBIOS"
         elif "PSCI" in fn:
             section_name = "Suite_Name: PSCI"
             suite_key    = "PSCI"
@@ -669,7 +673,8 @@ def merge_json_files(json_files, output_file):
         "Suite_Name: DT Validate": "Suite_Name: Standalone",
         "Suite_Name: Ethtool Test": "Suite_Name: Standalone",
         "Suite_Name: Read Write Check Block Devices": "Suite_Name: Standalone",
-        "Suite_Name: PSCI": "Suite_Name: Standalone"
+        "Suite_Name: PSCI": "Suite_Name: Standalone",
+        "Suite_Name: SMBIOS": "Suite_Name: Standalone"
     }
 
     def _entry_to_list(entry):
