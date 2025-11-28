@@ -167,11 +167,10 @@ get_sbmr_acs_src()
         fi
     else
         echo "Using SBMR-ACS TAG: $SBMR_ACS_TAG"
-        git clone --depth 1 --branch "$SBMR_ACS_TAG" https://github.com/ARM-software/sbmr-acs sbmr-acs
-        if [ $? -ne 0 ]; then
-            echo "Error: Failed to download sbmr-acs source code with tag $SBMR_ACS_TAG"
-            exit 1
-        fi
+        git clone --single-branch https://github.com/ARM-software/sbmr-acs sbmr-acs
+        pushd sbmr-acs
+        git checkout $SBMR_ACS_TAG
+        popd
     fi
     pushd $TOP_DIR/sbmr-acs
         git archive --format=tar.gz -o sbmr-acs.tar.gz HEAD
