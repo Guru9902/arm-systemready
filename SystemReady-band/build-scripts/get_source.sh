@@ -31,6 +31,9 @@ get_linux_src()
 {
     echo "Downloading Linux source code. Version : $LINUX_KERNEL_VERSION"
     git clone --depth 1 --branch v$LINUX_KERNEL_VERSION https://github.com/torvalds/linux.git linux-${LINUX_KERNEL_VERSION}
+    pushd linux-${LINUX_KERNEL_VERSION}
+    git apply $TOP_DIR/../common/patches/0001-add-support-compatible-ID-PNP0D15.patch
+    popd
     if [ $? -ne 0 ]; then
         echo "Error: Failed to download Linux source code"
         exit 1
